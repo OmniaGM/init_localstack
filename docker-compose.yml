@@ -1,0 +1,64 @@
+version: '2.3'
+networks: 
+    internal:
+      
+services:
+  nginx:
+    image: nginx:latest
+    container_name: fake_aws_api
+    volumes:
+      - ./nginx:/tmp/nginx
+      - ./nginx/certs:/etc/nginx/ssl
+    environment:
+        - BRIDGE=${BRIDGE}
+        - REGION=${AWS_DEFAULT_REGION}
+        - CERTS_FOLDER=${CERTS_FOLDER}
+    command: >
+        /bin/bash -c "/tmp/nginx/certs.sh ${AWS_DEFAULT_REGION} ${CERTS_FOLDER} && 
+                      envsubst < /tmp/nginx/nginx.conf.template > /etc/nginx/conf.d/nginx.conf &&
+                      nginx -g 'daemon off;'"
+    ports:
+      - 80:80
+      - 443:443
+    networks: 
+        - internal
+
+  localstack:
+    image: markglh/initialised-localstack:latest
+    container_name: localstack
+    environment:
+        - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+        - AWS_ACCESS_KEY_ID=foo
+        - AWS_SECRET_ACCESS_KEY=bar
+        - AWS_CA_BUNDLE=/usr/local/share/ca-certificates/awslocal-$AWS_DEFAULT_REGION.pem
+        - SERVICES=${LOCALSTACK_SERVICES:-dynamodb,cloudformation}
+        - PORT_WEB_UI=9000
+    volumes:
+        - ./bootstrap_localstack:/opt/bootstrap/scripts
+        - ./nginx/certs:/usr/local/share/ca-certificates
+    ports:
+        - "4567-4582:4567-4582"
+        - "9000:9000"
+    extra_hosts:
+      - "dynamodb.us-east-1.amazonaws.com:172.17.0.1"
+    networks: 
+        - internal 
+
+  app_testing:
+    build: ./
+    restart: always
+    depends_on: 
+      - nginx
+      - localstack
+    volumes:
+      - ./nginx/certs:/usr/local/share/ca-certificates
+    networks: 
+        - internal
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_CA_BUNDLE=/usr/local/share/ca-certificates/awslocal-$AWS_DEFAULT_REGION.pem
+      - AWS_ACCESS_KEY_ID=foo
+      - AWS_SECRET_ACCESS_KEY=bar
+    extra_hosts:
+       - "dynamodb.us-east-1.amazonaws.com:172.17.0.1"
+    command: ["/bin/bash", "-c", "aws dynamodb list-tables"]

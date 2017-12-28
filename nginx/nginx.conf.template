@@ -1,0 +1,21 @@
+server {
+
+  listen 80;
+  server_name dynamodb.us-east-1.amazonaws.com;
+
+  location / {
+    proxy_pass          http://172.17.0.1:4569;
+  }
+}
+server {
+
+  listen 443 ssl;
+  server_name dynamodb.${REGION}.amazonaws.com;
+
+  ssl_certificate           ${CERTS_FOLDER}/awslocal-${REGION}.crt;
+  ssl_certificate_key       ${CERTS_FOLDER}/awslocal-${REGION}.key;
+  location / {
+    proxy_pass http://${BRIDGE}:4569$request_uri;
+  }
+  
+}
